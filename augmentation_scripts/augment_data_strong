@@ -1,0 +1,138 @@
+# augment_data.py
+import os
+import time
+import numpy as np
+from keras.src.legacy.preprocessing.image import ImageDataGenerator
+
+# CONFIGURATION
+DATA_DIR = "./augmented_none/"
+AUG_DIR = "./augmented_strong/"
+AUG_FACTOR = 2  # number of augmented copies per original image
+
+AUG_SETTINGS = {
+    "rotation_range": 30,
+    "width_shift_range": 0.2,
+    "height_shift_range": 0.2,
+    "shear_range": 0.2,
+    "zoom_range": 0.2,
+    "horizontal_flip": True,
+    "brightness_range": [0.8, 1.2],
+    "fill_mode": "nearest",
+}
+
+os.makedirs(AUG_DIR, exist_ok=True)
+
+# LOAD ORIGINAL DATA
+print("AUGMENTING DATASET")
+
+print("\nLoading original data...")
+X_train = np.load(os.path.join(DATA_DIR, 'X_train.npy'))
+y_train = np.load(os.path.join(DATA_DIR, 'y_train.npy'))
+X_val   = np.load(os.path.join(DATA_DIR, 'X_val.npy'))
+y_val   = np.load(os.path.join(DATA_DIR, 'y_val.npy'))
+X_test  = np.load(os.path.join(DATA_DIR, 'X_test.npy'))
+y_test  = np.load(os.path.join(DATA_DIR, 'y_test.npy'))
+
+print(f"  Train: {X_train.shape[0]} images")
+print(f"  Val:   {X_val.shape[0]} images")
+print(f"  Test:  {X_test.shape[0]} images")
+
+# Add channel dimension if needed
+if X_train.ndim == 3:
+    X_train = X_train[..., np.newaxis]
+    X_val   = X_val[..., np.newaxis]
+    X_test  = X_test[..., np.newaxis]
+
+print(f"\nWith channel dimension:")
+print(f"  Train: {X_train.shape}")
+print(f"  Val:   {X_val.shape}")
+print(f"  Test:  {X_test.shape}")
+
+# AUGMENT TRAINING SET ONLY
+datagen = ImageDataGenerator(**AUG_SETTINGS)
+
+print(f"\nGenerating {AUG_FACTOR}x augmentation on TRAINING set only")
+print(f"Augmentation settings: {AUG_SETTINGS}")
+
+augmented_X = []
+augmented_y = []
+
+start_time = time.time()
+
+for i in range(len(X_train)):
+    # Keep original image
+    augmented_X.append(X_train[i])
+    augmented_y.append(y_train[i])
+
+    # Generate augmented copies
+    for _ in range(AUG_FACTOR):
+        aug_image = datagen.random_transform(X_train[i])
+        augmented_X.append(aug_image)
+        augmented_y.append(y_train[i])
+
+    if (i + 1) % 500 == 0:
+        print(f"  Processed {i + 1}/{len(X_train)} images...")
+
+end_time = time.time()
+
+augmented_X = np.array(augmented_X, dtype=np.float32)
+augmented_y = np.array(augmented_y, dtype=np.int64)
+
+print(f"\nAugmentation complete")
+print(f"  Time taken:        {(end_time - start_time):.2f} seconds")
+print(f"  Original train:    {len(X_train)}")
+print(f"  Augmented train:   {len(augmented_X)}")
+print(f"  Augmentation factor: {len(augmented_X) / len(X_train):.1f}x")
+
+# SAVE AUGMENTED TRAINING 
+print(f"\nSaving to: {AUG_DIR}")
+
+np.save(os.path.join(AUG_DIR, 'X_train.npy'), augmented_X)
+np.save(os.path.join(AUG_DIR, 'y_train.npy'), augmented_y)
+
+# Validation set
+np.save(os.path.join(AUG_DIR, 'X_val.npy'), X_val)
+np.save(os.path.join(AUG_DIR, 'y_val.npy'), y_val)
+
+# Test set
+np.save(os.path.join(AUG_DIR, 'X_test.npy'), X_test)
+np.save(os.path.join(AUG_DIR, 'y_test.npy'), y_test)
+
+print(f"  X_train_aug.npy: {augmented_X.shape}")
+print(f"  y_train_aug.npy: {augmented_y.shape}")
+print(f"  X_val.npy:       {X_val.shape}")
+print(f"  y_val.npy:       {y_val.shape}")
+print(f"  X_test.npy:      {X_test.shape}")
+print(f"  y_test.npy:      {y_test.shape}")
+
+# SAVE METADATA
+info_path = os.path.join(AUG_DIR, 'augmentation_info.txt')
+with open(info_path, 'w') as f:
+    f.write("AUGMENTATION INFORMATION\n")
+
+    f.write("SOURCE\n")
+    f.write(f"  Data directory:     {DATA_DIR}\n")
+    f.write(f"  Output directory:   {AUG_DIR}\n\n")
+
+    f.write("DATASET SIZES\n")
+    f.write(f"  Original train:     {len(X_train)}\n")
+    f.write(f"  Augmented train:    {len(augmented_X)}\n")
+    f.write(f"  Augmentation factor: {len(augmented_X) / len(X_train):.1f}x\n")
+    f.write(f"  Validation:         {len(X_val)} (unchanged)\n")
+    f.write(f"  Test:               {len(X_test)} (unchanged)\n\n")
+
+    f.write("AUGMENTATION SETTINGS (applied to training set only)\n")
+    for key, value in AUG_SETTINGS.items():
+        f.write(f"  {key}: {value}\n")
+
+    f.write(f"\nGENERATION TIME\n")
+    f.write(f"  {end_time - start_time:.2f} seconds\n\n")
+
+    f.write("NOTES\n")
+    f.write("  - Original images are retained in the augmented training set.\n")
+    f.write("  - Validation and test sets are NOT augmented.\n")
+    f.write("  - Random seed not fixed; re-running will produce different\n")
+    f.write("    augmented samples. Use the saved arrays for reproducibility.\n")
+
+print(f"\nMetadata saved to: {info_path}")
+print("AUGMENTATION COMPLETE")
